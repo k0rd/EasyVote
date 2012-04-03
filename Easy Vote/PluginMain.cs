@@ -15,9 +15,9 @@ namespace EasyVote
     [APIVersion(1, 11)]
     public class EasyVote : TerrariaPlugin
     {
-        public static PollConfig getConfig { get; set; }
-        internal static string getConfigPath { get { return Path.Combine(TShock.SavePath, "PollConfig.json"); } }
+        public static string save = "";
         public static List<Player> Players = new List<Player>();
+        public static PollList polls;
         public override string Name
         {
             get { return "Easy Vote"; }
@@ -63,8 +63,7 @@ namespace EasyVote
         public EasyVote(Main game)
             : base(game)
         {
-            Order = -1;
-            getConfig = new PollConfig();
+            Order = 10;
         }
 
         public void OnInitialize()
@@ -122,48 +121,22 @@ namespace EasyVote
 
         public static void SetupConfig()
         {
-            try
-            {
-                if (!File.Exists(getConfigPath))
-                    NewConfig();
-                getConfig = PollConfig.Read(getConfigPath);
-                getConfig.Write(getConfigPath);
-            }
-            catch (Exception ex)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error in EasyVote config file");
-                Console.ForegroundColor = ConsoleColor.Gray;
-                Log.Error("Config Exception in EasyVote Config file");
-                Log.Error(ex.ToString());
-            }
-        }
+            PollReader reader = new PollReader();
+            save = Path.Combine(TShockAPI.TShock.SavePath, "Polls.cfg");
 
-        public static void NewConfig()
-        {
-            File.WriteAllText(getConfigPath,
-            "{" + Environment.NewLine +
-            "  \"Polls\": [" + Environment.NewLine +
-            "    {" + Environment.NewLine +
-            "      \"Name\": \"Yes/No\"," + Environment.NewLine +
-            "      \"Question\": \"Vote Yes or No.\"," + Environment.NewLine +
-            "      \"TimeOfDay\": \"none\"," + Environment.NewLine +
-            "      \"Monster\": \"none\"" + Environment.NewLine +
-            "    }," + Environment.NewLine +
-            "    {" + Environment.NewLine +
-            "      \"Name\": \"Monster\"," + Environment.NewLine +
-            "      \"Question\": \"Vote Yes or No for a dungeon guardian to spawn.\"," + Environment.NewLine +
-            "      \"TimeOfDay\": \"none\"," + Environment.NewLine +
-            "      \"Monster\": \"68\"" + Environment.NewLine +
-            "    }," + Environment.NewLine +
-            "    {" + Environment.NewLine +
-            "      \"Name\": \"Day/Night\"," + Environment.NewLine +
-            "      \"Question\": \"Vote Yes or No for it to be night.\"," + Environment.NewLine +
-            "      \"TimeOfDay\": \"Night\"," + Environment.NewLine +
-            "      \"Monster\": \"none\"" + Environment.NewLine +
-            "    }" + Environment.NewLine +
-            "  ]" + Environment.NewLine +
-            "}");
+            if (File.Exists(save))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine(polls.polls.Count + " polls have been loaded.");
+                Console.ResetColor();
+            }
+            else
+            {
+                polls = reader.writeFile(save);
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No polls found! Basic poll file being created. 3 example polls loaded.");
+                Console.ResetColor();
+            }
         }
     #endregion
     #region Commands
@@ -178,153 +151,26 @@ namespace EasyVote
             else
             {
                 string name = args.Parameters[0].ToLower();
-                foreach (var Poll in getConfig.Polls)
+                if (polls.findPoll(name).PollName == name)
                 {
-                    if (Poll.Name.ToLower() == name)
-                    {
-                        OpenPoll = true;
-                        CurrentPoll = Poll.Name;
-                    }
+                    OpenPoll = true;
+                    CurrentPoll = polls.findPoll(name).PollName;
                 }
             }
         }
 
         public static void GetResults(CommandArgs args)
         {
-            if ((args.Parameters[0] == "-l") || (args.Parameters[0] == "-long"))
-            {
-                int i = 0;
-                int x = 0;
-                foreach (Player player in EasyVote.Players)
-                {
-                    if (player.GetVoteResult() != Player.VoteResults.novote)
-                    {
-                        if (player.GetVoteResult() == Player.VoteResults.yes)
-                        {
-                            args.Player.SendMessage(string.Format("{0} voted Yes", player.TSPlayer.Name), Color.Cyan);
-                            i++;
-                        }
-                        else
-                        {
-                            args.Player.SendMessage(string.Format("{0} voted No", player.TSPlayer.Name), Color.Cyan);
-                            x++;
-                        }
-                    }
-                }
-                if (i > x)
-                {
-                    foreach (Player ply in EasyVote.Players)
-                    {
-                        if (ply.TSPlayer.Group.HasPermission("Poll"))
-                        {
-                            int Monster;
-                            string TimeOfDay = null;
-                            foreach (var Poll in getConfig.Polls)
-                            {
-                                if (Poll.Name == CurrentPoll)
-                                {
-                                    int.TryParse(Poll.Monster, out Monster);
-                                    switch (Poll.TimeOfDay.ToLower())
-                                    {
-                                        case "day":
-                                            TimeOfDay = "day";
-                                            break;
-                                        case "night":
-                                            TimeOfDay = "night";
-                                            break;
-                                    }
-                                    if (Monster != 0)
-                                    {
-                                        Commands.HandleCommand(ply.TSPlayer, string.Format("/spawnmob {0}", Monster));
-                                    }
-                                    if (TimeOfDay != null)
-                                    {
-                                        Commands.HandleCommand(ply.TSPlayer, string.Format("/time {0}", TimeOfDay));
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-                CurrentPoll = null;
-                OpenPoll = false;
-            }
-            else
-            {
-                int i = 0;
-                int x = 0;
-                foreach (Player player in EasyVote.Players)
-                {
-                    if (player.GetVoteResult() != Player.VoteResults.novote)
-                    {
-                        if (player.GetVoteResult() == Player.VoteResults.yes)
-                        {
-                            i++;
-                        }
-                        else
-                        {
-                            x++;
-                        }
-                    }
-                }
-                args.Player.SendMessage(i + " players voted Yes, and " + x + " players voted No.");
-                if (i > x)
-                {
-                    foreach (Player ply in EasyVote.Players)
-                    {
-                        if (ply.TSPlayer.Group.HasPermission("Poll"))
-                        {
-                            int Monster;
-                            string TimeOfDay = null;
-                            foreach (var Poll in getConfig.Polls)
-                            {
-                                if (Poll.Name == CurrentPoll)
-                                {
-                                    int.TryParse(Poll.Monster, out Monster);
-                                    switch (Poll.TimeOfDay.ToLower())
-                                    {
-                                        case "day":
-                                            TimeOfDay = "day";
-                                            break;
-                                        case "night":
-                                            TimeOfDay = "night";
-                                            break;
-                                    }
-                                    if (Monster != 0)
-                                    {
-                                        Commands.HandleCommand(ply.TSPlayer, string.Format("/spawnmob {0}", Monster));
-                                    }
-                                    if (TimeOfDay != null)
-                                    {
-                                        Commands.HandleCommand(ply.TSPlayer, string.Format("/time {0}", TimeOfDay));
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-                CurrentPoll = null;
-                OpenPoll = false;
-            }
+
         }
 
         public static void Vote(CommandArgs args)
         {
-            string PollQuestion;
             if (args.Parameters.Count < 1)
             {
                 args.Player.SendMessage("Current Poll: " + CurrentPoll, Color.DarkCyan);
-                foreach (var Poll in getConfig.Polls)
-                {
-                    if (CurrentPoll == Poll.Name)
-                    {
-                        PollQuestion = Poll.Question;
-                        args.Player.SendMessage(PollQuestion, Color.DarkCyan);
-                        args.Player.SendMessage("Vote Yes or No", Color.DarkCyan);
-                    }
-                }
+                args.Player.SendMessage(polls.findPoll(CurrentPoll).Question, Color.DarkCyan);
+                args.Player.SendMessage("Vote Yes or No");
             }
             else if (OpenPoll == true)
             {
@@ -347,19 +193,4 @@ namespace EasyVote
         }
     }
     #endregion
-    public class Poll
-    {
-        public string Name;
-        public string Question;
-        public string TimeOfDay;
-        public string Monster;
-
-        public Poll(string Name, string Question, string TimeOfDay, string Monster)
-        {
-            this.Name = Name;
-            this.Question = Question;
-            this.TimeOfDay = TimeOfDay;
-            this.Monster = Monster;
-        }
-    }
 }
